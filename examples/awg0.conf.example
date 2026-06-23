@@ -1,0 +1,25 @@
+[Interface]
+PrivateKey = <your-private-key>
+Address = 10.8.0.2/32
+DNS = 1.1.1.1, 8.8.8.8
+MTU = 1280
+
+[AmneziaWG]
+H1 = 100000000-200000000
+H2 = 300000000-400000000
+H3 = 500000000-600000000
+H4 = 700000000-800000000
+S1 = 16
+S2 = 16
+S3 = 16
+S4 = 32
+Jc = 4
+Jmin = 200
+Jmax = 1024
+I1 = <b 0xd100000001><rc 8><t><r 50>
+
+[Peer]
+PublicKey = <server-public-key>
+Endpoint = vpn.example.com:51820
+AllowedIPs = 0.0.0.0/0, ::/0
+PersistentKeepalive = 25

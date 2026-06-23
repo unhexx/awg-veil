@@ -1,47 +1,134 @@
-Основная архитектурная идея
-GUI‑клиент AmneziaVPN — это Qt‑приложение, которое умеет поднимать self‑hosted VPN и конфигурировать протоколы, включая AmneziaWG, но сама реализация протокола вынесена в отдельный Go‑движок и tools. Это позволяет спроектировать CLI и Python‑lib так, чтобы они работали напрямую с amneziawg-go (tun‑движок) и amneziawg-tools (awg, awg-quick), не завися от Qt и «продуктовой» логики AmneziaVPN. Конфиденциальность обеспечивается тем, что клиент управляет только локальными конфигами/процессами, без телеметрии и сторонних API.
+# awg-veil
 
-Ключевые требования к проекту
-В функциональном плане критично: полная поддержка параметров AmneziaWG 2.0 (диапазоны заголовков H1–H4, префиксы S1–S4, junk‑поезд Jc/Jmin/Jmax, CPS‑цепочка I1–I5) и совместимость с конфигами, которые генерирует AmneziaVPN и другие тулзы. Вендоронезависимость достигается тем, что формат конфигов и запуск туннеля не привязаны к конкретному продукту: CLI/библиотека должны уметь читать/писать стандартный awg*.conf и дергать awg-quick/amneziawg-go в любом окружении (Arch, Debian, роутеры с AmneziaWG и т.п.). С точки зрения безопасности — минимальный доверенный периметр: никакой скрытой логики, явная работа с ключами и обфускационными параметрами, прозрачный формат конфигов.
+Vendor-independent CLI and Python library for **AmneziaWG 2.0** — a thin layer over `amneziawg-go` and `amneziawg-tools` (`awg`, `awg-quick`).
 
-Ядро консольного клиента
-CLI имеет смысл строить как тонкий слой над конфигами и awg-quick: команды уровня init, gen-config, validate, up, down, status.
+[![CI](https://github.com/unhexx/awg-veil/actions/workflows/ci.yml/badge.svg)](https://github.com/unhexx/awg-veil/actions/workflows/ci.yml)
+![Python](https://img.shields.io/badge/python-3.11%2B-blue)
+![License](https://img.shields.io/badge/license-GPLv3-green)
 
-Внутри — отдельный модуль, который:
+## Features
 
-парсит AmneziaWG‑конфиг (WireGuard‑секция + [AmneziaWG] с H/S/J/I‑параметрами);
+- Parse and validate AmneziaWG 2.0 configs (H1–H4, S1–S4, Jc/Jmin/Jmax, I1–I5 CPS)
+- Generate obfuscation profiles: `default`, `censorship_medium`, `censorship_high`
+- Manage tunnels via `awg-quick` (Linux)
+- No telemetry, no vendor lock-in — works with configs from AmneziaVPN, GL.iNet, amnezigo
 
-валидирует ограничения из доки (непересекающиеся диапазоны H, корректные диапазоны длины S/J, допустимые CPS‑теги).
+## Requirements
 
-генерирует «профили» обфускации (например, censorship_high, default) по рекомендациям Amnezia‑документации и GL.iNet.
+| Component | Source |
+|-----------|--------|
+| Python 3.11+ | system |
+| [amneziawg-tools](https://github.com/amnezia-vpn/amneziawg-tools) | AUR / build from source |
+| [amneziawg-go](https://github.com/amnezia-vpn/amneziawg-go) | AUR / build from source |
 
-Запуск туннеля — через awg-quick up awg0 / down awg0 и, при необходимости, прямой вызов amneziawg-go wg0 в foreground для контроля процесса.
+On Arch Linux:
 
-Архитектура Python‑библиотеки
-Python‑lib логично собрать из четырёх пакетов: config, obfuscation, tunnel, secrets.
+```bash
+# AUR packages (names may vary)
+yay -S amneziawg-tools amneziawg-go
+```
 
-config: модели интерфейса/peer’ов и обфускации, методы from_file, to_file, validate для работы с .conf.
+## Quick start
 
-obfuscation: генерация диапазонов H1–H4 (с проверкой пересечений), S1–S4, Junk‑параметров и CPS‑builder для I1–I5 по синтаксису тегов <b>, <t>, <r>, <rc>, <rd>.
+```bash
+# Install
+git clone https://github.com/unhexx/awg-veil.git
+cd awg-veil
+python -m venv .venv && source .venv/bin/activate
+pip install -e .
 
-tunnel: backend для Linux/macOS/Windows, который под капотом вызывает awg-quick/amneziawg-go или Windows‑библиотеку AmneziaWG (embeddable tunnel library).
+# Create config skeleton
+awg-veil init awg0
 
-secrets: безопасная генерация и хранение ключей, интеграция с внешними секрет‑хранилищами по желанию.
+# Apply obfuscation profile
+awg-veil gen-config awg0 --profile censorship_high
 
-API уровня AmneziaConfig + TunnelManager будет удобен для интеграции в DevOps и agentic‑loop: можно программно подготовить конфиг, поднять туннель на время задачи и затем гарантированно его убрать.
+# Edit ~/.config/awg-veil/awg0.conf — set Peer PublicKey, Endpoint, AllowedIPs
 
-Пофазный roadmap (сжатый)
-Фаза 0 — ресёрч + POC
-Зафиксировать формат конфигов AmneziaWG 2.0 (по докам и реф‑конфигам), разобрать amneziawg-go/amneziawg-tools, сделать минимальный CLI, который умеет up/down/status по уже существующему конфигу.
+# Validate
+awg-veil validate ~/.config/awg-veil/awg0.conf
 
-Фаза 1 — конфиг‑слой и валидатор
-Реализовать парсер и валидатор AmneziaWG‑конфигов, добавить генерацию нескольких обфускационных «профилей» с разумными дефолтами под жёсткую цензуру (основанными на S/H/J/I из документации).
+# Bring tunnel up (requires root)
+sudo awg-veil up awg0
 
-Фаза 2 — Python‑core
-Вынести конфиг/обфускацию и базовый TunnelManager в библиотеку, покрыть тестами и подготовить чистый API без CLI.
+# Status & teardown
+awg-veil status awg0
+sudo awg-veil down awg0
+```
 
-Фаза 3 — полноценный CLI поверх Python‑lib
-Реализовать UX команд (инициализация, генерация конфигов, проверка, поднятие/остановка), добавить интеграции с существующими AmneziaWG‑панелями и консольными тулзами.
+### Dry-run (no root, no awg-quick)
 
-Фаза 4–5 — hardening и публикация
-Допилить security‑проверки (минимальные требования к обфускации, строгие WARN/ERROR при «слишком слабых» профилях), написать доку и выложить lib на PyPI, CLI в AUR/дистрибутивы.
+```bash
+awg-veil up awg0 --dry-run --skip-validate
+awg-veil down awg0 --dry-run
+```
+
+## CLI commands
+
+| Command | Description |
+|---------|-------------|
+| `init <name>` | Create config skeleton with generated keys |
+| `gen-config <name> --profile <p>` | Apply obfuscation profile |
+| `validate <path>` | Validate config (use `--strict` to fail on warnings) |
+| `up <iface>` | Start tunnel via `awg-quick` |
+| `down <iface>` | Stop tunnel |
+| `status [iface]` | Show tunnel status |
+
+Config directory: `~/.config/awg-veil/` (override with `AWG_VEIL_CONFIG_DIR`).
+
+## Python API
+
+```python
+from awg_veil import AmneziaConfig
+from awg_veil.config import validate_config
+from awg_veil.obfuscation import apply_profile
+from awg_veil.tunnel import TunnelManager
+
+cfg = AmneziaConfig.from_file("awg0.conf")
+cfg = apply_profile(cfg, "censorship_high")
+result = validate_config(cfg)
+assert result.ok
+
+cfg.to_file("/etc/amneziawg/awg0.conf")  # merges [AmneziaWG] → [Interface]
+
+mgr = TunnelManager("awg0")
+mgr.up("/etc/amneziawg/awg0.conf")
+print(mgr.status().raw_output)
+mgr.down()
+```
+
+## Obfuscation profiles
+
+| Profile | Jc | S1–S4 | CPS (I1–I3) |
+|---------|-----|-------|-------------|
+| `default` | 2 | light padding | — |
+| `censorship_medium` | 4 | medium | I1, I2 |
+| `censorship_high` | 6 | strong | I1, I2, I3 |
+
+See [docs/configuration.md](docs/configuration.md) for full parameter reference.
+
+## Development
+
+```bash
+pip install -e ".[dev]"
+make check    # lint + typecheck + tests (85% coverage)
+```
+
+## Architecture
+
+```
+CLI (Typer) → awg_veil library → awg-quick / amneziawg-go
+                 ├─── config     (parse, validate, merge)
+                 ├─── obfuscation (profiles, CPS builder)
+                 ├─── tunnel     (Linux subprocess / mock)
+                 └─── secrets    (WireGuard key generation)
+```
+
+## License
+
+GPLv3 — compatible with [amneziawg-tools](https://github.com/amnezia-vpn/amneziawg-tools) and [amneziawg-go](https://github.com/amnezia-vpn/amneziawg-go).
+
+## Links
+
+- [AmneziaWG documentation](https://docs.amnezia.org/documentation/amnezia-wg/)
+- [Design document (RU)](%D0%9F%D1%80%D0%BE%D0%B5%D0%BA%D1%82%20%D0%BA%D0%BE%D0%BD%D1%81%D0%BE%D0%BB%D1%8C%D0%BD%D0%BE%D0%B3%D0%BE%20%D0%BA%D0%BB%D0%B8%D0%B5%D0%BD%D1%82%D0%B0%20%D0%B8%20%D0%B1%D0%B8%D0%B1%D0%BB%D0%B8%D0%BE%D1%82%D0%B5%D0%BA%D0%B8%20Python%20%D0%B4%D0%BB%D1%8F%20AmneziaWG%202.0.md)
