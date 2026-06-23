@@ -1,6 +1,8 @@
 # awg-veil
 
-Vendor-independent CLI and Python library for **AmneziaWG 2.0** — a thin layer over `amneziawg-go` and `amneziawg-tools` (`awg`, `awg-quick`).
+VeilAWG — удобный вендоронезависимый клиент и Python-библиотека для AmneziaWG 2.0. Продвинутая обфускация, Docker-first и готовность к AI-агентам. MIT.
+
+VeilAWG — vendor-independent CLI client and Python library for AmneziaWG 2.0 with advanced traffic obfuscation. Docker-first and agentic-ready. MIT licensed.
 
 [![CI](https://github.com/unhexx/awg-veil/actions/workflows/ci.yml/badge.svg)](https://github.com/unhexx/awg-veil/actions/workflows/ci.yml)
 ![Python](https://img.shields.io/badge/python-3.11%2B-blue)
